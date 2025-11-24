@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { Input } from '@/components/ui/input';
@@ -14,16 +14,33 @@ interface MapProps {
     description: string;
     image_url: string | null;
     created_at: string;
+    category: string;
   }>;
   onMapClick?: (lat: number, lng: number) => void;
 }
 
-const Map = ({ reports, onMapClick }: MapProps) => {
+export interface MapHandle {
+  flyTo: (lat: number, lng: number, zoom?: number) => void;
+}
+
+const Map = forwardRef<MapHandle, MapProps>(({ reports, onMapClick }, ref) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const [mapboxToken, setMapboxToken] = useState<string>('');
   const [tokenInput, setTokenInput] = useState<string>('');
   const markersRef = useRef<mapboxgl.Marker[]>([]);
+
+  useImperativeHandle(ref, () => ({
+    flyTo: (lat: number, lng: number, zoom: number = 15) => {
+      if (map.current) {
+        map.current.flyTo({
+          center: [lng, lat],
+          zoom: zoom,
+          duration: 2000,
+        });
+      }
+    },
+  }));
 
   useEffect(() => {
     const savedToken = localStorage.getItem('mapbox_token');
@@ -41,9 +58,13 @@ const Map = ({ reports, onMapClick }: MapProps) => {
       map.current = new mapboxgl.Map({
         container: mapContainer.current,
         style: 'mapbox://styles/mapbox/light-v11',
-        center: [-74.006, 40.7128], // Default: NYC
-        zoom: 12,
+        center: [78.9629, 20.5937], // Center of India
+        zoom: 4.5,
         pitch: 0,
+        maxBounds: [
+          [68.1766451354, 6.7478], // Southwest coordinates (India bounds)
+          [97.4025614766, 35.5087], // Northeast coordinates (India bounds)
+        ],
       });
 
       map.current.addControl(
@@ -52,6 +73,45 @@ const Map = ({ reports, onMapClick }: MapProps) => {
         }),
         'top-right'
       );
+
+      // Add heatmap layer when style loads
+      map.current.on('load', () => {
+        if (!map.current) return;
+
+        // Add heatmap source
+        map.current.addSource('reports-heat', {
+          type: 'geojson',
+          data: {
+            type: 'FeatureCollection',
+            features: [],
+          },
+        });
+
+        // Add heatmap layer
+        map.current.addLayer({
+          id: 'reports-heatmap',
+          type: 'heatmap',
+          source: 'reports-heat',
+          maxzoom: 15,
+          paint: {
+            'heatmap-weight': ['interpolate', ['linear'], ['get', 'weight'], 0, 0, 6, 1],
+            'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 0, 1, 15, 3],
+            'heatmap-color': [
+              'interpolate',
+              ['linear'],
+              ['heatmap-density'],
+              0, 'rgba(33,102,172,0)',
+              0.2, 'rgb(103,169,207)',
+              0.4, 'rgb(209,229,240)',
+              0.6, 'rgb(253,219,199)',
+              0.8, 'rgb(239,138,98)',
+              1, 'rgb(178,24,43)',
+            ],
+            'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 0, 2, 15, 20],
+            'heatmap-opacity': ['interpolate', ['linear'], ['zoom'], 7, 0.8, 15, 0.3],
+          },
+        });
+      });
 
       // Add click handler for placing new reports
       if (onMapClick) {
@@ -71,13 +131,31 @@ const Map = ({ reports, onMapClick }: MapProps) => {
     }
   }, [mapboxToken, onMapClick]);
 
-  // Update markers when reports change
+  // Update markers and heatmap when reports change
   useEffect(() => {
     if (!map.current || !mapboxToken) return;
 
     // Clear existing markers
     markersRef.current.forEach(marker => marker.remove());
     markersRef.current = [];
+
+    // Update heatmap data
+    const heatmapFeatures = reports.map(report => ({
+      type: 'Feature' as const,
+      properties: { weight: 1 },
+      geometry: {
+        type: 'Point' as const,
+        coordinates: [report.longitude, report.latitude],
+      },
+    }));
+
+    const source = map.current.getSource('reports-heat') as mapboxgl.GeoJSONSource;
+    if (source) {
+      source.setData({
+        type: 'FeatureCollection',
+        features: heatmapFeatures,
+      });
+    }
 
     // Group reports by location to show intensity
     const locationGroups: Record<string, Array<typeof reports[number]>> = {};
@@ -89,7 +167,7 @@ const Map = ({ reports, onMapClick }: MapProps) => {
       locationGroups[key].push(report);
     });
 
-    // Create markers with size based on report count
+    // Create markers with size based on report count (tiers: 5, 10, 25)
     Object.entries(locationGroups).forEach(([key, groupReports]) => {
       const [lat, lng] = key.split(',').map(Number);
       const count = groupReports.length;
@@ -97,10 +175,10 @@ const Map = ({ reports, onMapClick }: MapProps) => {
       // Create custom marker element
       const el = document.createElement('div');
       el.className = 'report-marker';
-      const size = Math.min(20 + count * 8, 50);
+      const size = Math.min(20 + count * 5, 60);
       el.style.width = `${size}px`;
       el.style.height = `${size}px`;
-      el.style.backgroundColor = count >= 3 ? 'hsl(0 84% 60%)' : count >= 2 ? 'hsl(35 90% 60%)' : 'hsl(180 70% 45%)';
+      el.style.backgroundColor = count >= 25 ? 'hsl(0 84% 60%)' : count >= 10 ? 'hsl(25 95% 53%)' : count >= 5 ? 'hsl(35 90% 60%)' : 'hsl(180 70% 45%)';
       el.style.borderRadius = '50%';
       el.style.border = '3px solid white';
       el.style.boxShadow = '0 2px 8px rgba(0,0,0,0.3)';
@@ -113,13 +191,32 @@ const Map = ({ reports, onMapClick }: MapProps) => {
       el.style.fontSize = '12px';
       el.textContent = count.toString();
 
-      const popup = new mapboxgl.Popup({ offset: 25 } as any).setHTML(
-        `<div class="p-2">
+      // Build popup content with images
+      const categoryLabels: Record<string, string> = {
+        garbage: 'Garbage',
+        bird_feed: 'Bird Feed',
+        dog_poop: 'Dog Poop',
+        busted_sewage: 'Busted Sewage',
+        other: 'Other',
+      };
+
+      const imagesHtml = groupReports
+        .filter(r => r.image_url)
+        .slice(0, 3)
+        .map(r => `<img src="${r.image_url}" alt="Report" class="w-full h-24 object-cover rounded mb-1" />`)
+        .join('');
+
+      const popupContent = `
+        <div class="p-2 max-w-xs">
           <p class="font-semibold text-sm mb-1">${groupReports[0].street_name || 'Unknown location'}</p>
           <p class="text-xs text-muted-foreground mb-1">${count} ${count === 1 ? 'report' : 'reports'}</p>
-          <p class="text-xs">${groupReports[0].description}</p>
-        </div>`
-      );
+          <p class="text-xs mb-1"><strong>Type:</strong> ${categoryLabels[groupReports[0].category] || 'Unknown'}</p>
+          ${imagesHtml}
+          <p class="text-xs mt-1">${groupReports[0].description}</p>
+        </div>
+      `;
+
+      const popup = new mapboxgl.Popup({ offset: 25 } as any).setHTML(popupContent);
 
       const marker = new mapboxgl.Marker({ element: el } as any)
         .setLngLat([lng, lat])
@@ -178,6 +275,8 @@ const Map = ({ reports, onMapClick }: MapProps) => {
       <div ref={mapContainer} className="absolute inset-0 rounded-lg overflow-hidden shadow-elevated" />
     </div>
   );
-};
+});
+
+Map.displayName = 'Map';
 
 export default Map;
