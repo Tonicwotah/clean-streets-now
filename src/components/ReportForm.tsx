@@ -4,9 +4,10 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { MapPin, Upload, X } from 'lucide-react';
+import { MapPin, Upload, X, Tag } from 'lucide-react';
 
 interface ReportFormProps {
   selectedLocation?: { lat: number; lng: number } | null;
@@ -17,6 +18,7 @@ interface ReportFormProps {
 const ReportForm = ({ selectedLocation, onReportSubmitted, onClose }: ReportFormProps) => {
   const [streetName, setStreetName] = useState('');
   const [description, setDescription] = useState('');
+  const [category, setCategory] = useState('garbage');
   const [image, setImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -77,6 +79,7 @@ const ReportForm = ({ selectedLocation, onReportSubmitted, onClose }: ReportForm
           longitude: selectedLocation.lng,
           street_name: streetName.trim() || null,
           description: description.trim(),
+          category: category,
           image_url: imageUrl,
         });
 
@@ -87,6 +90,7 @@ const ReportForm = ({ selectedLocation, onReportSubmitted, onClose }: ReportForm
       // Reset form
       setStreetName('');
       setDescription('');
+      setCategory('garbage');
       setImage(null);
       setImagePreview(null);
       
@@ -125,6 +129,47 @@ const ReportForm = ({ selectedLocation, onReportSubmitted, onClose }: ReportForm
           )}
 
           <div className="space-y-2">
+            <Label htmlFor="category">Category *</Label>
+            <Select value={category} onValueChange={setCategory}>
+              <SelectTrigger id="category">
+                <SelectValue placeholder="Select a category" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="garbage">
+                  <div className="flex items-center gap-2">
+                    <Tag className="h-4 w-4" />
+                    Garbage
+                  </div>
+                </SelectItem>
+                <SelectItem value="bird_feed">
+                  <div className="flex items-center gap-2">
+                    <Tag className="h-4 w-4" />
+                    Bird Feed
+                  </div>
+                </SelectItem>
+                <SelectItem value="dog_poop">
+                  <div className="flex items-center gap-2">
+                    <Tag className="h-4 w-4" />
+                    Dog Poop
+                  </div>
+                </SelectItem>
+                <SelectItem value="busted_sewage">
+                  <div className="flex items-center gap-2">
+                    <Tag className="h-4 w-4" />
+                    Busted Sewage
+                  </div>
+                </SelectItem>
+                <SelectItem value="other">
+                  <div className="flex items-center gap-2">
+                    <Tag className="h-4 w-4" />
+                    Other
+                  </div>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
             <Label htmlFor="streetName">Street Name (Optional)</Label>
             <Input
               id="streetName"
@@ -138,7 +183,7 @@ const ReportForm = ({ selectedLocation, onReportSubmitted, onClose }: ReportForm
             <Label htmlFor="description">Description *</Label>
             <Textarea
               id="description"
-              placeholder="Describe the garbage issue..."
+              placeholder="Describe the issue..."
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={4}

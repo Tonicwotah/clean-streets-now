@@ -1,7 +1,8 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { MapPin, Calendar, Users } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { MapPin, Calendar, Users, Tag, Navigation } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
 interface Report {
@@ -12,13 +13,22 @@ interface Report {
   description: string;
   image_url: string | null;
   created_at: string;
+  category: string;
 }
 
 interface ReportsListProps {
   reports: Report[];
+  onLocationClick?: (lat: number, lng: number) => void;
 }
 
-const ReportsList = ({ reports }: ReportsListProps) => {
+const ReportsList = ({ reports, onLocationClick }: ReportsListProps) => {
+  const categoryLabels: Record<string, string> = {
+    garbage: 'Garbage',
+    bird_feed: 'Bird Feed',
+    dog_poop: 'Dog Poop',
+    busted_sewage: 'Busted Sewage',
+    other: 'Other',
+  };
   // Group reports by street name and count
   const groupedReports = reports.reduce((acc, report) => {
     const key = report.street_name || 'Unknown Location';
@@ -42,8 +52,9 @@ const ReportsList = ({ reports }: ReportsListProps) => {
   );
 
   const getSeverityColor = (count: number) => {
-    if (count >= 5) return 'destructive';
-    if (count >= 3) return 'default';
+    if (count >= 25) return 'destructive';
+    if (count >= 10) return 'default';
+    if (count >= 5) return 'default';
     return 'secondary';
   };
 
@@ -65,8 +76,8 @@ const ReportsList = ({ reports }: ReportsListProps) => {
               </div>
             ) : (
               sortedGroups.map(([streetName, data]) => (
-                <Card key={streetName} className="border-l-4" style={{
-                  borderLeftColor: data.count >= 5 ? 'hsl(0 84% 60%)' : data.count >= 3 ? 'hsl(35 90% 60%)' : 'hsl(180 70% 45%)'
+                <Card key={streetName} className="border-l-4 hover:shadow-md transition-shadow" style={{
+                  borderLeftColor: data.count >= 25 ? 'hsl(0 84% 60%)' : data.count >= 10 ? 'hsl(25 95% 53%)' : data.count >= 5 ? 'hsl(35 90% 60%)' : 'hsl(180 70% 45%)'
                 }}>
                   <CardContent className="pt-4">
                     <div className="space-y-3">
@@ -75,6 +86,12 @@ const ReportsList = ({ reports }: ReportsListProps) => {
                           <div className="flex items-center gap-2 mb-1">
                             <MapPin className="h-4 w-4 text-primary" />
                             <h3 className="font-semibold text-sm">{streetName}</h3>
+                          </div>
+                          <div className="flex items-center gap-2 mb-2">
+                            <Badge variant="outline" className="text-xs">
+                              <Tag className="h-3 w-3 mr-1" />
+                              {categoryLabels[data.reports[0].category] || 'Unknown'}
+                            </Badge>
                           </div>
                           <p className="text-xs text-muted-foreground line-clamp-2">
                             {data.reports[0].description}
@@ -94,15 +111,28 @@ const ReportsList = ({ reports }: ReportsListProps) => {
                         />
                       )}
 
-                      <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                        <div className="flex items-center gap-1">
-                          <Calendar className="h-3 w-3" />
-                          {formatDistanceToNow(new Date(data.latestReport), { addSuffix: true })}
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex flex-col gap-1 text-xs text-muted-foreground">
+                          <div className="flex items-center gap-1">
+                            <Calendar className="h-3 w-3" />
+                            {formatDistanceToNow(new Date(data.latestReport), { addSuffix: true })}
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <MapPin className="h-3 w-3" />
+                            {data.reports[0].latitude.toFixed(4)}, {data.reports[0].longitude.toFixed(4)}
+                          </div>
                         </div>
-                        <div className="flex items-center gap-1">
-                          <MapPin className="h-3 w-3" />
-                          {data.reports[0].latitude.toFixed(4)}, {data.reports[0].longitude.toFixed(4)}
-                        </div>
+                        {onLocationClick && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => onLocationClick(data.reports[0].latitude, data.reports[0].longitude)}
+                            className="shrink-0"
+                          >
+                            <Navigation className="h-3 w-3 mr-1" />
+                            View
+                          </Button>
+                        )}
                       </div>
                     </div>
                   </CardContent>

@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { AlertCircle, Plus } from 'lucide-react';
-import Map from '@/components/Map';
+import Map, { MapHandle } from '@/components/Map';
 import ReportForm from '@/components/ReportForm';
 import ReportsList from '@/components/ReportsList';
 import { toast } from 'sonner';
@@ -15,6 +15,7 @@ interface Report {
   description: string;
   image_url: string | null;
   created_at: string;
+  category: string;
 }
 
 const Index = () => {
@@ -22,6 +23,7 @@ const Index = () => {
   const [selectedLocation, setSelectedLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [showReportForm, setShowReportForm] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const mapRef = useRef<MapHandle>(null);
 
   const fetchReports = async () => {
     try {
@@ -76,6 +78,10 @@ const Index = () => {
     fetchReports();
   };
 
+  const handleLocationClick = (lat: number, lng: number) => {
+    mapRef.current?.flyTo(lat, lng);
+  };
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -109,6 +115,7 @@ const Index = () => {
           {/* Map Section */}
           <div className="lg:col-span-2 h-full">
             <Map 
+              ref={mapRef}
               reports={reports} 
               onMapClick={handleMapClick}
             />
@@ -116,7 +123,10 @@ const Index = () => {
 
           {/* Reports List Section */}
           <div className="h-full">
-            <ReportsList reports={reports} />
+            <ReportsList 
+              reports={reports} 
+              onLocationClick={handleLocationClick}
+            />
           </div>
         </div>
       </main>
